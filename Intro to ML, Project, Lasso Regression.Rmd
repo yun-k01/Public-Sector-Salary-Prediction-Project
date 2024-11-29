@@ -2,7 +2,10 @@
 title: "Lasso Regression"
 author: "Yun Kyaw"
 date: "`r Sys.Date()`"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_float: true
 ---
 ## Importing Datasets and Libraries
 ```{r setup, echo = TRUE, results = "hide", message=FALSE}
@@ -82,10 +85,19 @@ rsq_hosp = 1 - rss/tss
 
 ### Visualizing the Predictions
 ```{r}
-comp_data = data.frame('True' = y_test_h, 'Pred' = pred_hosp)
+hosp_data = data.frame('True' = y_test_h, 'Pred' = pred_hosp)
 
 ggplot() +
-  geom_point(aes(x = s1, y = True), data = comp_data, color = "blue")
+  geom_point(aes(x = s1, y = True), data = hosp_data, color = "blue") + 
+  geom_abline(intercept = 1, slope = 1, color="red") +
+  xlab("Predicted") 
+```
+```{r}
+ggplot() +
+  geom_density(aes(True, fill = "Actual"), alpha = .2, data = hosp_data) +
+  geom_density(aes(s1, fill = "Predicted"), alpha = .2, data = hosp_data) +
+  scale_fill_manual(name = "Variable", values = c(Actual = "red", Predicted = "green")) + 
+  xlab("Total Compensation")
 ```
 
 
@@ -148,10 +160,19 @@ rsq_mun = 1 - rss/tss
 
 ### Visualizing the Predictions
 ```{r}
-comp_data = data.frame('True' = y_test_m, 'Pred' = pred_mun)
+mun_data = data.frame('True' = y_test_m, 'Pred' = pred_mun)
 
 ggplot() +
-  geom_point(aes(x = s1, y = True), data = comp_data, color = "blue")
+  geom_point(aes(x = s1, y = True), data = mun_data, color = "blue") + 
+  geom_abline(intercept = 1, slope = 1, color="red") +
+  xlab("Predicted")
+```
+```{r}
+ggplot() +
+  geom_density(aes(True, fill = "Actual"), alpha = .2, data = mun_data) +
+  geom_density(aes(s1, fill = "Predicted"), alpha = .2, data = mun_data) +
+  scale_fill_manual(name = "Variable", values = c(Actual = "red", Predicted = "green")) + 
+  xlab("Total Compensation")
 ```
 
 ## School Dataset
@@ -213,10 +234,20 @@ rsq_sch = 1 - rss/tss
 
 ### Visualizing the Predictions
 ```{r}
-comp_data = data.frame('True' = y_test_s, 'Pred' = pred_sch)
+sch_data = data.frame('True' = y_test_s, 'Pred' = pred_sch)
 
 ggplot() +
-  geom_point(aes(x = s1, y = True), data = comp_data, color = "blue")
+  geom_point(aes(x = s1, y = True), data = sch_data, color = "blue") + 
+  geom_abline(intercept = 1, slope = 1, color="red") +
+  xlab("Predicted")
+```
+
+```{r}
+ggplot() +
+  geom_density(aes(True, fill = "Actual"), alpha = .2, data = sch_data) +
+  geom_density(aes(s1, fill = "Predicted"), alpha = .2, data = sch_data) +
+  scale_fill_manual(name = "Variable", values = c(Actual = "red", Predicted = "green")) + 
+  xlab("Total Compensation")
 ```
 
 ## Comparing the Three Lasso Regression Models
