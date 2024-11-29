@@ -1,0 +1,331 @@
+---
+title: "XGBoost Regression"
+output: html_document
+date: "2024-11-28"
+---
+```{r}
+library(readr)
+library(dplyr)
+library(xgboost)
+library(caret)
+library(fastDummies)
+library(tidyr)
+library(ModelMetrics)
+library(ggplot2)
+
+hosp_df = read_csv("new_hospital_with_wages.csv")
+mun_df = read_csv("new_municipalities_with_wages.csv")
+sch_df = read_csv("new_school_with_wages.csv")
+
+library(scales)
+df_scaled <- df %>%
+  mutate(across(where(is.numeric), scale))
+
+# hospital dataset
+set.seed(0)
+
+# dropping sector, employer, salary paid, and taxable benefits columns
+drop = c("Sector", "Employer", "Salary Paid", "Taxable Benefits") 
+
+hosp_df = hosp_df[, !(names(hosp_df) %in% drop)] %>%
+  drop_na()
+
+# creating dummy variables for job title
+df = dummy_cols(hosp_df, remove_selected_columns = TRUE)
+
+# creating a 70-30 train-test split
+n = nrow(df) * 0.7
+random_index = sample(nrow(df), n)
+hosp_train = df[random_index, ]
+hosp_test = df[-random_index, ]
+
+# Preparing matrices for XGBoost
+x_train_h = as.matrix(hosp_train[-4])
+y_train_h = hosp_train$"Total Compensation"
+
+x_test_h = as.matrix(hosp_test[-4])
+y_test_h = hosp_test$"Total Compensation"
+
+# Remove Outliers
+Q1 <- quantile(hosp_test$`Total Compensation`, 0.05)
+Q3 <- quantile(hosp_test$`Total Compensation`, 0.95)
+IQR <- Q3 - Q1
+
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+hosp_test <- hosp_test %>%
+  filter(`Total Compensation` >= lower_bound & `Total Compensation` <= upper_bound)
+
+# Train an XGBoost model
+dtrain_h = xgb.DMatrix(data = x_train_h, label = y_train_h)
+dtest_h = xgb.DMatrix(data = x_test_h, label = y_test_h)
+
+# XGBoost parameters
+params = list(
+  booster = "gbtree",
+  objective = "reg:squarederror",
+  eta = 0.1, # Learning rate
+  max_depth = 6,
+  subsample = 0.8,
+  colsample_bytree = 0.8
+)
+
+xgb_model_h <- xgb.train(
+  params = params,
+  data = dtrain_h,
+  nrounds = 100,
+  watchlist = list(train = dtrain_h, test = dtest_h),
+  print_every_n = 10
+)
+
+# Calculate RMSE for training and testing sets
+train_pred_h = predict(xgb_model_h, dtrain_h)
+test_pred_h = predict(xgb_model_h, dtest_h)
+
+rmse_hosp_train = sqrt(mean((y_train_h - train_pred_h)^2))
+rmse_hosp_test = sqrt(mean((y_test_h - test_pred_h)^2))
+
+r2_hosp_train = 1 - sum((y_train_h - train_pred_h)^2) / sum((y_train_h - mean(y_train_h))^2)
+r2_hosp_test = 1 - sum((y_test_h - test_pred_h)^2) / sum((y_test_h - mean(y_test_h))^2)
+
+#municipalities dataset
+set.seed(1)
+
+# dropping sector, employer, salary paid, and taxable benefits columns
+drop = c("Sector", "Employer", "Salary Paid", "Taxable Benefits") 
+
+mun_df = mun_df[, !(names(mun_df) %in% drop)] %>%
+  drop_na()
+
+# creating dummy variables for job title
+df = dummy_cols(mun_df, remove_selected_columns = TRUE)
+
+# creating a 70-30 train-test split
+n = nrow(df) * 0.7
+random_index = sample(nrow(df), n)
+mun_train = df[random_index, ]
+mun_test = df[-random_index, ]
+
+# Preparing matrices for XGBoost
+x_train_m = as.matrix(mun_train[-4])
+y_train_m = mun_train$"Total Compensation"
+
+x_test_m = as.matrix(mun_test[-4])
+y_test_m = mun_test$"Total Compensation"
+
+# Train an XGBoost model
+dtrain_m = xgb.DMatrix(data = x_train_m, label = y_train_m)
+dtest_m = xgb.DMatrix(data = x_test_m, label = y_test_m)
+
+xgb_model_m = xgb.train(
+  params = params,
+  data = dtrain_m,
+  nrounds = 100,
+  watchlist = list(train = dtrain_m, test = dtest_m),
+  print_every_n = 10,
+  early_stopping_rounds = 10,
+  nthread = 1
+)
+
+# Calculate RMSE for training and testing sets
+train_pred_m = predict(xgb_model_m, dtrain_m)
+test_pred_m = predict(xgb_model_m, dtest_m)
+
+rmse_mun_train = sqrt(mean((y_train_m - train_pred_m)^2))
+rmse_mun_test = sqrt(mean((y_test_m - test_pred_m)^2))
+
+r2_mun_train = 1 - sum((y_train_m - train_pred_m)^2) / sum((y_train_m - mean(y_train_m))^2)
+r2_mun_test = 1 - sum((y_test_m - test_pred_m)^2) / sum((y_test_m - mean(y_test_m))^2)
+
+#school dataset
+set.seed(1)
+
+# dropping sector, employer, salary paid, and taxable benefits columns
+drop = c("Sector", "Employer", "Salary Paid", "Taxable Benefits") 
+
+sch_df = sch_df[, !(names(sch_df) %in% drop)] %>%
+  drop_na()
+
+# creating dummy variables for job title
+df = dummy_cols(sch_df, remove_selected_columns = TRUE)
+
+# creating a 70-30 train-test split
+n = nrow(df) * 0.7
+random_index = sample(nrow(df), n)
+sch_train = df[random_index, ]
+sch_test = df[-random_index, ]
+
+# Preparing matrices for XGBoost
+x_train_s = as.matrix(sch_train[-4])
+y_train_s = sch_train$"Total Compensation"
+
+x_test_s = as.matrix(sch_test[-4])
+y_test_s = sch_test$"Total Compensation"
+
+# Train an XGBoost model
+dtrain_s = xgb.DMatrix(data = x_train_s, label = y_train_s)
+dtest_s = xgb.DMatrix(data = x_test_s, label = y_test_s)
+
+xgb_model_s = xgb.train(
+  params = params,
+  data = dtrain_s,
+  nrounds = 100,
+  watchlist = list(train = dtrain_s, test = dtest_s),
+  print_every_n = 10,
+  early_stopping_rounds = 10
+)
+
+# Calculate RMSE for training and testing sets
+train_pred_s = predict(xgb_model_s, dtrain_s)
+test_pred_s = predict(xgb_model_s, dtest_s)
+
+rmse_sch_train = sqrt(mean((y_train_s - train_pred_s)^2))
+rmse_sch_test = sqrt(mean((y_test_s - test_pred_s)^2))
+
+r2_sch_test = 1 - sum((y_test_s - test_pred_s)^2) / sum((y_test_s - mean(y_test_s))^2)
+
+
+# Create a Summary Table
+model_comparison <- data.frame(
+  Sector = c("Hospitals", "Municipalities", "Schools"),
+  Train_RMSE = c(rmse_hosp_train, rmse_mun_train, rmse_sch_train),
+  Test_RMSE = c(rmse_hosp_test, rmse_mun_test, rmse_sch_test),
+  R2 = c(r2_hosp_test, r2_mun_test, r2_sch_test)
+)
+
+# Display the Summary Table
+print(model_comparison)
+```
+
+
+```{r}
+# Load necessary libraries
+library(xgboost)
+library(ggplot2)
+library(dplyr)
+
+# Function to remove "Total Compensation" from feature importance
+clean_feature_importance <- function(importance_data, exclude_feature) {
+  importance_data %>% filter(Feature != exclude_feature)
+}
+
+# Hospitals dataset feature importance
+hosp_feature_importance <- xgb.importance(model = xgb_model_h)
+hosp_feature_importance <- clean_feature_importance(hosp_feature_importance, "Total Compensation")
+
+hosp_importance_plot <- ggplot(hosp_feature_importance, aes(x = Frequency, y = reorder(Feature, Frequency))) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(
+    title = "Feature Importance by F-Score (Hospitals)",
+    x = "F-Score (Frequency of Use)",
+    y = "Features"
+  ) +
+  theme_minimal()
+
+# Municipalities dataset feature importance
+mun_feature_importance <- xgb.importance(model = xgb_model_m)
+mun_feature_importance <- clean_feature_importance(mun_feature_importance, "Total Compensation")
+
+mun_importance_plot <- ggplot(mun_feature_importance, aes(x = Frequency, y = reorder(Feature, Frequency))) +
+  geom_bar(stat = "identity", fill = "darkorange") +
+  labs(
+    title = "Feature Importance by F-Score (Municipalities)",
+    x = "F-Score (Frequency of Use)",
+    y = "Features"
+  ) +
+  theme_minimal()
+
+# Schools dataset feature importance
+sch_feature_importance <- xgb.importance(model = xgb_model_s)
+sch_feature_importance <- clean_feature_importance(sch_feature_importance, "Total Compensation")
+
+sch_importance_plot <- ggplot(sch_feature_importance, aes(x = Frequency, y = reorder(Feature, Frequency))) +
+  geom_bar(stat = "identity", fill = "purple") +
+  labs(
+    title = "Feature Importance by F-Score (Schools)",
+    x = "F-Score (Frequency of Use)",
+    y = "Features"
+  ) +
+  theme_minimal()
+
+# Display all three plots
+print(hosp_importance_plot)
+print(mun_importance_plot)
+print(sch_importance_plot)
+
+```
+
+
+
+```{r}
+
+# Load ggplot2
+library(ggplot2)
+
+# Assuming the datasets are `hospital_predictions`, `municipality_predictions`, and `school_predictions`
+# Each dataset contains "CalendarYear", "Actual", and "Predicted" columns.
+
+# 1. Plot for Hospital Dataset
+hospital_actual_vs_predicted <- ggplot(hospital_predictions, aes(x = CalendarYear)) +
+  geom_point(aes(y = Actual, color = "Actual"), size = 1, alpha = 0.5) +
+  geom_point(aes(y = Predicted, color = "Predicted"), size = 1, alpha = 0.5) +
+  geom_line(aes(y = Actual, color = "Actual"), linetype = "solid", size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = Predicted, color = "Predicted"), linetype = "dashed", size = 0.8, alpha = 0.7) +
+  labs(title = "Actual vs Predicted Total Compensation (Hospital)",
+       x = "Calendar Year",
+       y = "Total Compensation",
+       color = "Legend") +
+  scale_color_manual(values = c("Actual" = "blue", "Predicted" = "red")) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+# 2. Plot for Municipality Dataset
+municipality_actual_vs_predicted <- ggplot(municipality_predictions, aes(x = CalendarYear)) +
+  geom_point(aes(y = Actual, color = "Actual"), size = 1, alpha = 0.5) +
+  geom_point(aes(y = Predicted, color = "Predicted"), size = 1, alpha = 0.5) +
+  geom_line(aes(y = Actual, color = "Actual"), linetype = "solid", size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = Predicted, color = "Predicted"), linetype = "dashed", size = 0.8, alpha = 0.7) +
+  labs(title = "Actual vs Predicted Total Compensation (Municipality)",
+       x = "Calendar Year",
+       y = "Total Compensation",
+       color = "Legend") +
+  scale_color_manual(values = c("Actual" = "blue", "Predicted" = "red")) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+# 3. Plot for School Dataset
+school_actual_vs_predicted <- ggplot(school_predictions, aes(x = CalendarYear)) +
+  geom_point(aes(y = Actual, color = "Actual"), size = 1, alpha = 0.5) +
+  geom_point(aes(y = Predicted, color = "Predicted"), size = 1, alpha = 0.5) +
+  geom_line(aes(y = Actual, color = "Actual"), linetype = "solid", size = 0.8, alpha = 0.7) +
+  geom_line(aes(y = Predicted, color = "Predicted"), linetype = "dashed", size = 0.8, alpha = 0.7) +
+  labs(title = "Actual vs Predicted Total Compensation (School)",
+       x = "Calendar Year",
+       y = "Total Compensation",
+       color = "Legend") +
+  scale_color_manual(values = c("Actual" = "blue", "Predicted" = "red")) +
+  theme_minimal() +
+  theme(
+    legend.position = "top",
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+# Display the plots
+print(hospital_actual_vs_predicted)
+print(municipality_actual_vs_predicted)
+print(school_actual_vs_predicted)
+
+```
