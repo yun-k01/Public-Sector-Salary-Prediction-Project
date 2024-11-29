@@ -15,7 +15,7 @@ library(tidyr)
 library(ModelMetrics)
 library(ggplot2)
 library(lmtest)
-library(MASS)
+library(MASS) 
 
 hosp_df = read_csv("new_hospital_with_wages.csv")
 mun_df = read_csv("new_municipalities_with_wages.csv")
@@ -35,78 +35,49 @@ hosp_df = hosp_df[,!(names(hosp_df) %in% drop)] %>%
 # creating dummy variables for job title
 df = dummy_cols(hosp_df, remove_selected_columns = TRUE)
 
+# removing outliers from dataset
+Q1 = quantile(unlist(df[5]), 0.25)
+Q3 = quantile(unlist(df[5]), 0.75)
+IQR = Q3 - Q1
+
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+
+df = df[unlist(df[5]) >= lower_bound & unlist(df[5]) <= upper_bound, ]
+
+# creating training and testing sets
 n = nrow(df)*0.7
 random_index = sample(nrow(df), n) # creating a 70-30 partition of training and testing data
 hosp_train = df[random_index, ]
 hosp_test = df[-random_index, ] 
 
+# selecting predictor variables with interaction terms
 x_train_h = data.matrix(hosp_train[-5])
-y_train_h = as.vector(unlist(hosp_train[5])) # selecting total compensation as the response variable
-
+x_train_h_interactions = model.matrix(~ (.)^2 - . - 1, data = as.data.frame(x_train_h))
 x_test_h = data.matrix(hosp_test[-5])
+x_test_h_interactions = model.matrix(~ (.)^2 - . - 1, data = as.data.frame(x_test_h))
+
+# selecting total compensation as the response variable
+y_train_h = as.vector(unlist(hosp_train[5]))
 y_test_h = as.vector(unlist(hosp_test[5]))
 ```
 
-### LINE Assumptions
-```{r}
-# cook's distance/influential points
-lm_hosp = lm(y_train_h ~ x_train_h)
-
-# residual plot to test for linearity and equal variance
-res = resid(lm_hosp)
-plot(fitted(lm_hosp), res)
-abline(0, 0)
-bptest(lm_hosp)
-
-# QQ plot to test normal assumption
-qqnorm(res)
-qqline(res)
-
-# Performing Box-Cox transformation to create the equal variance and normality
-bc_data_hosp = data.frame(y = y_train_h, x_train_h)
-bc = boxcox(y ~ . , data = bc_data_hosp)
-lambda = bc$x[which.max(bc$y)] # finding ideal lambda for boxcox 
-
-box_model_hosp = lm(((y^(lambda)-1)/(y)) ~ ., data = bc_data_hosp)
-
-# observing LINE assumptions for boxcox transformed data
-res_hosp = resid(box_model_hosp)
-plot(fitted(box_model_hosp), res_hosp)
-abline(0, 0)
-bptest(box_model_hosp)
-
-qqnorm(res_hosp)
-qqline(res_hosp)
-```
-
-### Box Cox Transformation onto Data
-```{r}
-y_train_h = (y_train_h^(lambda)-1)/(y_train_h)
-y_test_h = (y_test_h^(lambda)-1)/(y_test_h)
-```
 
 ### Creating a Lasso Regression with k-fold cv
 ```{r}
 # Lasso - utilize the training partition to perform validation of results
 # selecting lambda using cross validation
 set.seed(1)
-lasso.cv.out_h = cv.glmnet(x = x_train_h, y = y_train_h, alpha = 1) 
-# plot(lasso.cv.out)
-
-train_hosp = predict(lasso.cv.out_h, s = lasso.cv.out_h$lambda.min, newx = x_train_h)
-rmse_hosp_train = rmse(y_train_h, train_hosp)
-# rmse_hosp_train = 1.599515e-06
+lasso.cv.out_h = cv.glmnet(x = x_train_h_interactions, y = y_train_h, alpha = 1) 
 
 # using lambda from smallest cross validation error
-pred_hosp = predict(lasso.cv.out_h, s = lasso.cv.out_h$lambda.min, newx = x_test_h)
+pred_hosp = predict(lasso.cv.out_h, s = lasso.cv.out_h$lambda.min, newx = x_test_h_interactions)
 rmse_hosp = rmse(y_test_h, pred_hosp)
-# rmse_hosp = 1.600682e-06
 
 # R2
 rss = sum((pred_hosp - y_test_h) ^ 2)  ## residual sum of squares
 tss = sum((y_test_h - mean(y_test_h)) ^ 2)  ## total sum of squares
 rsq_hosp = 1 - rss/tss
-# rsq = 0.3077149
 ```
 
 ### Visualizing the Predictions
@@ -131,54 +102,31 @@ mun_df = mun_df[,!(names(mun_df) %in% drop)] %>%
 # creating dummy variables for job title
 df = dummy_cols(mun_df, remove_selected_columns = TRUE)
 
+# removing outliers from dataset
+Q1 = quantile(unlist(df[5]), 0.25)
+Q3 = quantile(unlist(df[5]), 0.75)
+IQR = Q3 - Q1
+
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+
+df = df[unlist(df[5]) >= lower_bound & unlist(df[5]) <= upper_bound, ]
+
+# creating training and testing sets
 n = nrow(df)*0.7
 random_index = sample(nrow(df), n) # creating a 70-30 partition of training and testing data
 mun_train = df[random_index, ]
-mun_test = df[-random_index, ] 
+mun_test = df[-random_index, ]
 
+# selecting predictor variables with interaction terms
 x_train_m = data.matrix(mun_train[-5])
-y_train_m = as.vector(unlist(mun_train[5])) # selecting total compensation as the response variable
-
+x_train_m_interactions = model.matrix(~ (.)^2 - . - 1, data = as.data.frame(x_train_m))
 x_test_m = data.matrix(mun_test[-5])
+x_test_m_interactions = model.matrix(~ (.)^2 - . - 1, data = as.data.frame(x_test_m))
+
+# selecting total compensation as the response variable
+y_train_m = as.vector(unlist(mun_train[5]))
 y_test_m = as.vector(unlist(mun_test[5]))
-```
-
-### LINE Assumptions
-```{r}
-# cook's distance/influential points
-lm_mun = lm(y_train_m ~ x_train_m)
-
-# residual plot to test for linearity and equal variance
-res = resid(lm_mun)
-plot(fitted(lm_mun), res)
-abline(0, 0)
-bptest(lm_mun)
-
-# QQ plot to test normal assumption
-qqnorm(res)
-qqline(res)
-
-# Performing Box-Cox transformation to create the equal variance and normality
-bc_data_mun = data.frame(y = y_train_m, x_train_m)
-bc = boxcox(y ~ . , data = bc_data_mun)
-lambda = bc$x[which.max(bc$y)] # finding ideal lambda for boxcox 
-
-box_model_mun = lm(((y^(lambda)-1)/(y)) ~ ., data = bc_data_mun)
-
-# observing LINE assumptions for boxcox transformed data
-res_mun = resid(box_model_mun)
-plot(fitted(box_model_mun), res_mun)
-abline(0, 0)
-bptest(box_model_mun)
-
-qqnorm(res_mun)
-qqline(res_mun)
-```
-
-### Box Cox Transformation onto Data
-```{r}
-y_train_m = (y_train_m^(lambda)-1)/(y_train_m)
-y_test_m = (y_test_m^(lambda)-1)/(y_test_m)
 ```
 
 ### Creating a Lasso Regression with k-fold cv
@@ -186,23 +134,16 @@ y_test_m = (y_test_m^(lambda)-1)/(y_test_m)
 # Lasso - utilize the training partition to perform validation of results
 # selecting lambda using cross validation
 set.seed(1)
-lasso.cv.out_m = cv.glmnet(x = x_train_m, y = y_train_m, alpha = 1) 
-# plot(lasso.cv.out)
-
-train_mun = predict(lasso.cv.out_m, s = lasso.cv.out_m$lambda.min, newx = x_train_m)
-rmse_mun_train = rmse(y_train_m, train_mun)
-# rmse_mun_train = 1.018185e-06
+lasso.cv.out_m = cv.glmnet(x = x_train_m_interactions, y = y_train_m, alpha = 1) 
 
 # using lambda from smallest cross validation error
-pred_mun = predict(lasso.cv.out_m, s = lasso.cv.out_m$lambda.min, newx = x_test_m)
+pred_mun = predict(lasso.cv.out_m, s = lasso.cv.out_m$lambda.min, newx = x_test_m_interactions)
 rmse_mun = rmse(y_test_m, pred_mun)
-# rmse_mun = 1.018734e-06
 
 # R2
 rss = sum((pred_mun - y_test_m) ^ 2)  ## residual sum of squares
 tss = sum((y_test_m - mean(y_test_m)) ^ 2)  ## total sum of squares
 rsq_mun = 1 - rss/tss
-# rsq = 0.1665321
 ```
 
 ### Visualizing the Predictions
@@ -226,55 +167,31 @@ sch_df = sch_df[,!(names(sch_df) %in% drop)] %>%
 # creating dummy variables for job title
 df = dummy_cols(sch_df, remove_selected_columns = TRUE)
 
-# creating train and test partitions
+# removing outliers from dataset
+Q1 = quantile(unlist(df[5]), 0.25)
+Q3 = quantile(unlist(df[5]), 0.75)
+IQR = Q3 - Q1
+
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+
+df = df[unlist(df[5]) >= lower_bound & unlist(df[5]) <= upper_bound, ]
+
+# creating training and testing sets
 n = nrow(df)*0.7
 random_index = sample(nrow(df), n) # creating a 70-30 partition of training and testing data
 sch_train = df[random_index, ]
 sch_test = df[-random_index, ]
 
+# selecting predictor variables with interaction terms
 x_train_s = data.matrix(sch_train[-5])
-y_train_s = as.vector(unlist(sch_train[5])) # selecting total compensation as the response variable
-
+x_train_s_interactions = model.matrix(~ (.)^2 - . - 1, data = as.data.frame(x_train_s))
 x_test_s = data.matrix(sch_test[-5])
+x_test_s_interactions = model.matrix(~ (.)^2 - . - 1, data = as.data.frame(x_test_s))
+
+# selecting total compensation as the response variable
+y_train_s = as.vector(unlist(sch_train[5]))
 y_test_s = as.vector(unlist(sch_test[5]))
-```
-
-### LINE Assumptions
-```{r}
-# cook's distance/influential points
-lm_sch = lm(y_train_s ~ x_train_s)
-
-# residual plot to test for linearity and equal variance
-res = resid(lm_sch)
-plot(fitted(lm_sch), res)
-abline(0, 0)
-bptest(lm_sch)
-
-# QQ plot to test normal assumption
-qqnorm(res)
-qqline(res)
-
-# Performing Box-Cox transformation to create the equal variance and normality
-bc_data_sch = data.frame(y = y_train_s, x_train_s)
-bc = boxcox(y ~ . , data = bc_data_sch)
-lambda = bc$x[which.max(bc$y)] # finding ideal lambda for boxcox 
-
-box_model_sch = lm(((y^(lambda)-1)/(y)) ~ ., data = bc_data_sch)
-
-# observing LINE assumptions for boxcox transformed data
-res_sch = resid(box_model_sch)
-plot(fitted(box_model_sch), res_sch)
-abline(0, 0)
-bptest(box_model_sch)
-
-qqnorm(res_sch)
-qqline(res_sch)
-```
-
-### Box Cox Transformation onto Data
-```{r}
-y_train_s = (y_train_s^(lambda)-1)/(y_train_s)
-y_test_s = (y_test_s^(lambda)-1)/(y_test_s)
 ```
 
 ### Creating a Lasso Regression with k-fold cv
@@ -282,23 +199,16 @@ y_test_s = (y_test_s^(lambda)-1)/(y_test_s)
 # Lasso - utilize the training partition to perform validation of results
 # selecting lambda using cross validation
 set.seed(1)
-lasso.cv.out_s = cv.glmnet(x = x_train_s, y = y_train_s, alpha = 1) 
-# plot(lasso.cv.out)
-
-train_sch = predict(lasso.cv.out_s, s = lasso.cv.out_s$lambda.min, newx = x_train_s)
-rmse_sch_train = rmse(y_train_s, train_sch)
-# rmse_sch_train = 8.620759e-07
+lasso.cv.out_s = cv.glmnet(x = x_train_s_interactions, y = y_train_s, alpha = 1) 
 
 # using lambda from smallest cross validation error
-pred_sch = predict(lasso.cv.out_s, s = lasso.cv.out_s$lambda.min, newx = x_test_s)
+pred_sch = predict(lasso.cv.out_s, s = lasso.cv.out_s$lambda.min, newx = x_test_s_interactions)
 rmse_sch = rmse(y_test_s, pred_sch)
-# rmse_sch = 8.624815e-07
 
 # R2
 rss = sum((pred_sch - y_test_s) ^ 2)  ## residual sum of squares
 tss = sum((y_test_s - mean(y_test_s)) ^ 2)  ## total sum of squares
 rsq_sch = 1 - rss/tss
-# rsq = 0.2186296
 ```
 
 ### Visualizing the Predictions
@@ -314,8 +224,7 @@ ggplot() +
 # creating a new dataframe
 regr_comp = data.frame(
   sector = c("hospitals", "municipalities", "schools"),
-  train_rmse = c(rmse_hosp_train, rmse_mun_train, rmse_sch_train),
-  test_rmse = c(rmse_hosp, rmse_mun, rmse_sch),
+  rmse = c(rmse_hosp, rmse_mun, rmse_sch),
   R2 = c(rsq_hosp, rsq_mun, rsq_sch)
 )
 regr_comp
