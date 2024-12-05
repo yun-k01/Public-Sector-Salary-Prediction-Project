@@ -24,7 +24,7 @@ df_scaled <- df %>%
 # hospital dataset
 set.seed(0)
 
-# dropping sector, employer, salary paid, and taxable benefits columns
+# dropping extra columns
 drop = c("Sector", "Employer", "Salary Paid", "Taxable Benefits") 
 
 hosp_df = hosp_df[, !(names(hosp_df) %in% drop)] %>%
@@ -141,7 +141,7 @@ r2_mun_test = 1 - sum((y_test_m - test_pred_m)^2) / sum((y_test_m - mean(y_test_
 #school dataset
 set.seed(1)
 
-# dropping sector, employer, salary paid, and taxable benefits columns
+# dropping extra columns
 drop = c("Sector", "Employer", "Salary Paid", "Taxable Benefits") 
 
 sch_df = sch_df[, !(names(sch_df) %in% drop)] %>%
